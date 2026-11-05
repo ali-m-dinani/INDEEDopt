@@ -1,6 +1,9 @@
 __pycache__/
 *.pyc
 short_run/
+/example_github/
+.ipynb_checkpoints/
+.DS_Store
 .idea/
 .vscode/
 .venv/
