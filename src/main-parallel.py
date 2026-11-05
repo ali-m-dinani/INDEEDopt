@@ -1,9 +1,12 @@
 ## Modified on Fevb 15 2021- 1.50pm
 
+import os
 import sys
+import csv
+import json
 ## path to the python script for data generation
-Path2script = "/Users/mertyigitsengul/Documents/python_packages/INDEEDopt_code/"
-sys.path.append(Path2script)
+Path2script = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, Path2script)
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -36,6 +39,7 @@ from ffield_generator.hydrogenbondparameter_read import hydrogenbondparameter_re
 from ffield_generator.diagonalterm_read import diagonalterm_read
 from ffield_generator.read_parameter import read_parameter
 from ffield_generator.define_ranges import define_ranges
+from ffield_generator.jax_md_engine import run_engine
 
 
 import shutil
@@ -46,6 +50,7 @@ import os
 import random
 import time
 import pandas as pd
+import numpy as np
 
 
 #Parallel part
@@ -65,6 +70,11 @@ gpf = 5
 ## number of samples to be taken in the parameter space
 ## nos is the first scan of parameter space
 nos = 4
+short_samples = int(os.environ.get("INDEEDOPT_SHORT_SAMPLES", "0"))
+if short_samples < 0:
+    raise ValueError("INDEEDOPT_SHORT_SAMPLES must be non-negative")
+if short_samples:
+    nos = short_samples
 ## nos_2 is the second scan around the best of the point
 nos_2 = 10
 
@@ -84,6 +94,7 @@ shutil.copy('folder/ffield', '.')
 
 cycle = range(nos)
 parameters = params_input_train()
+values = parameter_generator(parameters, len(cycle))
 
 #if gpf > 0:
 #    print("Generating parameter ranges")
@@ -97,6 +108,7 @@ length = len(parameters)
 
 
 def func(values, j):
+    original_dir = os.getcwd()
     
     #taking the information about which parameters will be altered
     
@@ -118,7 +130,10 @@ def func(values, j):
             assign_parameter(parameters[i][0], parameters[i][1], parameters[i][2], value)
             params_output(parameters[i][0],parameters[i][1],parameters[i][2], value)
         
-        os.system('./exe')
+        if os.environ.get("INDEEDOPT_ENGINE", "reaxff") == "jax-md":
+            run_engine()
+        else:
+            os.system('./exe')
         
 
         error_output(length)
@@ -126,10 +141,8 @@ def func(values, j):
         remove_forts()
 
         
-        os.chdir('..')
-        
-    except:
-        pass
+    finally:
+        os.chdir(original_dir)
 
 def data_set(initial_file_number):
     if os.path.exists('ffield'):
@@ -141,7 +154,9 @@ def zipping(iter):
     os.system('tar -cvzf errors'+str(iter)+'.tar individual_errors/ total_errors')
     
 def clean_fold():
-    os.system('rm -r ffield-*')
+    for folder_name in os.listdir('.'):
+        if folder_name.startswith('ffield-') and os.path.isdir(folder_name):
+            shutil.rmtree(folder_name)
 
 def data_ext(nos, length, num_prop):
     data_extract(nos, length, num_prop)
@@ -171,7 +186,38 @@ def run(values):
         launch.add_done_callback(doneElement)
     
     # Wait for the launches to complete.
-    [completed for completed in futures.as_completed(launches)]
+    [completed.result() for completed in futures.as_completed(launches)]
+
+
+def run_short(values):
+    if os.environ.get("INDEEDOPT_ENGINE") != "jax-md":
+        raise ValueError("Short mode requires INDEEDOPT_ENGINE=jax-md")
+
+    results = []
+    os.makedirs("short_results", exist_ok=True)
+    for sample in cycle:
+        func(values, sample)
+        folder_name = "ffield-" + str(sample)
+        with open(os.path.join(folder_name, "jax_md_results", "evaluation.json")) as report_file:
+            report = json.load(report_file)
+        results.append((sample, float(report["loss"])))
+        temporary = os.path.join("short_results", "results.csv.tmp")
+        with open(temporary, "w", newline="") as results_file:
+            writer = csv.writer(results_file)
+            writer.writerow(("sample", "loss"))
+            writer.writerows(results)
+        os.replace(temporary, os.path.join("short_results", "results.csv"))
+
+        best_sample, best_loss = min(results, key=lambda result: result[1])
+        best_folder = "ffield-" + str(best_sample)
+        for source, target in (("ffield", "best_ffield"),
+                               ("parameters", "best_parameters"),
+                               (os.path.join("jax_md_results", "evaluation.json"),
+                                "best_report.json")):
+            temporary = os.path.join("short_results", target + ".tmp")
+            shutil.copyfile(os.path.join(best_folder, source), temporary)
+            os.replace(temporary, os.path.join("short_results", target))
+    print("Best sample: {} (loss: {})".format(best_sample, best_loss))
     
     
 
@@ -188,6 +234,10 @@ if __name__ == '__main__':
     shutil.copy('params-ml', 'folder/')
     
     values = parameter_generator(parameters, len(cycle))
+
+    if short_samples:
+        run_short(values)
+        sys.exit(0)
     
     
     while enough == 0:

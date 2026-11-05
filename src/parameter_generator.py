@@ -9,7 +9,8 @@ def parameter_generator(parameters, cycle):
         parameters_a = defaultdict(list)
 
 
-        hc = lhs(length, cycle, criterion='centermaximin')
+        criterion = 'center' if cycle == 1 else 'centermaximin'
+        hc = lhs(length, cycle, criterion=criterion)
 
         
         for j in range(0,cycle):

@@ -3,6 +3,7 @@
 
 import tensorflow as tf
 import os
+import shutil
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -81,6 +82,14 @@ def bruteforce(param_size, num_prop, file_name, best_value, scan_width, iteratio
     for i in range(0, bp.shape[0]-1):
         best_point[i]=float(bp.iloc[i][0].split()[1])
     print("BEST ERROR: "+str(best_value))
+    def save_best_point():
+        temporary = "bruteforce_best.npz.tmp"
+        with open(temporary, "wb") as checkpoint_file:
+            np.savez(checkpoint_file, parameters=np.asarray(best_point).reshape(-1),
+                     error=float(best_value))
+        os.replace(temporary, "bruteforce_best.npz")
+
+    save_best_point()
     
     #best_point = pd.read_csv(os.path.join(".", "best_point.dat"), sep='\s+', header=None)
     #boundaries[4] = best_point - boundaries[3]
@@ -129,7 +138,11 @@ def bruteforce(param_size, num_prop, file_name, best_value, scan_width, iteratio
             assign_parameter(parameters[i][0], parameters[i][1], parameters[i][2], value)
             params_output(parameters[i][0],parameters[i][1],parameters[i][2], value)
         
-        os.system('./exe')
+        if os.environ.get("INDEEDOPT_ENGINE", "reaxff") == "jax-md":
+            from ffield_generator.jax_md_engine import run_engine
+            run_engine()
+        else:
+            os.system('./exe')
     
         reaxff_error = error_output_bf(param_size, "dl-parameters-rndm-"+str(nn)+".dat")
         
@@ -172,8 +185,9 @@ def bruteforce(param_size, num_prop, file_name, best_value, scan_width, iteratio
             if float(reaxff_error) < best_value:
                 best_value=float(reaxff_error)
                 best_point=c
+                save_best_point()
             else:
-                os.system('rm -r '+test_folder_name)
+                shutil.rmtree(test_folder_name)
                 
             print("BEST VALUE: "+str(best_value))
             print("BEST POINT: "+str(best_point))
