@@ -19,6 +19,38 @@ Recent updates to some subroutines due to Tensorflow Deep Learning library updat
 
 ## JAX MD ReaxFF evaluation
 
+### ReaxKit bounded smoke runner
+
+`python reaxkit_runner.py /absolute/path/run-config.json` implements the
+`reaxkit-external-runner-v1` contract for **JAX short sampling only**. Use
+`runtime.mode: external_runner` and command
+`[/path/to/python, /path/to/INDEEDopt/reaxkit_runner.py, "{run_config}"]`.
+Install `requirements-smoke.txt` in a separate Python environment; provide the
+existing JAX-ReaxFF interpreter as `settings.jax_python`, plus
+`jaxreaxff_source` and `jaxmd_source`. Set `engine: jax-md`, `short_samples: 2`,
+and `inputs.control: null`. No ReaxKit import or TensorFlow installation is needed.
+
+The runner reuses INDEEDopt's Latin-hypercube sampler and existing JAX evaluator.
+It honors supplied bounds (unlike the legacy main script's automatic 5% rewrite),
+and supports classic four-line atomic and two-line bond parameter blocks only
+(sections 2/3). Its token-based writer avoids the original byte-offset writer's
+dependence on trailing spaces. Candidate values retain four-decimal precision.
+Unsupported explicit full-mode settings are rejected rather than ignored.
+The existing JAX evaluator defaults, including no geometry minimization, remain
+unchanged; do not assume equivalence with AMS or a control-driven calculation.
+
+Use `--check-only` with the same request to inspect runner input compatibility
+without importing the sampler or launching an engine. ReaxKit YAML validation
+alone does not execute this external preflight. Every run needs a fresh native
+directory. Completed samples and best artifacts are atomically published in
+`short_results/`; individual engine reports remain in `ffield-*/jax_md_results`.
+The ReaxKit INDEEDopt converter already reads this layout. Requested orchestrator
+seeds are not applied by this runner; no reproducibility claim is made.
+
+This is **not** the deep-learning/surrogate/brute-force workflow. Those stages
+and the native standalone-engine runner remain unsupported by this entrypoint.
+Run real evaluations only in an authorized compute allocation.
+
 INDEEDopt can use the `reaxff_dev` JAX MD engine through the local JAX-ReaxFF driver. This mode evaluates each INDEEDopt candidate with JAX-ReaxFF and converts its unrounded results to the legacy `fort.13` and `fort.99` files used by the optimizer. It requires the companion `--machine_report` change in `JAX-ReaxFF/jaxreaxff/driver.py`.
 
 Install JAX-ReaxFF and its `cagrikymk/jax-md` `reaxff_dev` dependency in a Python environment, then set these variables before launching INDEEDopt from a directory containing `folder/` and `params-ml`:
