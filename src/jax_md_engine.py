@@ -49,6 +49,8 @@ def run_engine(directory="."):
         "--machine_report", str(Path("jax_md_results") / "evaluation.json"),
     ]
     environment = os.environ.copy()
+    for key in ("REAXKIT_OPTIMIZATION_TIME_LIMIT_SECONDS", "REAXKIT_TIMING_FILE", "REAXKIT_STOP_FILE"):
+        environment.pop(key, None)
     source = environment.get("INDEEDOPT_JAXREAXFF_SOURCE")
     jax_md_source = environment.get("INDEEDOPT_JAXMD_SOURCE")
     if source or jax_md_source:

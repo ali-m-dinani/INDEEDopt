@@ -88,6 +88,8 @@ def render_field(text, rows, values):
 
 
 def run(request, sampler=None, evaluator=None):
+    from run_budget import Budget
+    budget = Budget(request['native_directory'])
     rows = input_parameters(request)
     field = Path(request['inputs']['ffield']).read_text()
     render_field(field, rows, [(row[4] + row[5]) / 2 for row in rows])
@@ -112,7 +114,10 @@ def run(request, sampler=None, evaluator=None):
     try:
         for key, name in environment_keys.items():
             os.environ[name] = request['settings'][key]
+        budget.begin()
         for sample in range(request['settings']['short_samples']):
+            if budget.should_stop():
+                break
             candidate = root / f'ffield-{sample}'
             candidate.mkdir()
             (candidate / 'ffield').write_text(render_field(field, rows, samples[sample]))
@@ -140,6 +145,8 @@ def run(request, sampler=None, evaluator=None):
                     temporary.replace(output / target)
                 best = loss
             print(f'Sample {sample}: {loss}', flush=True)
+            budget.checkpoint(loss)
+        budget.finish()
     finally:
         for name, value in previous.items():
             if value is None:
